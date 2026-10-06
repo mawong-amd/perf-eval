@@ -122,6 +122,23 @@ def test_shipped_amd_profiles_have_no_rootdisk_hostpath():
         )
 
 
+def test_amd_pods_request_explicit_cpu_and_memory():
+    """AMD pods must carry explicit CPU and memory, requests == limits, or the
+    namespace LimitRange defaults (12 CPU / 200 GiB) are applied silently."""
+    profiles = g.load_profiles()
+    for gpu in ("MI300X", "MI355X"):
+        plugin = g.amd_k8s_plugin("img", 8, profiles[gpu], gpu)
+        res = plugin["kubernetes"]["podSpecPatch"]["containers"][0]["resources"]
+        assert res["requests"] == res["limits"], (gpu, res)
+        assert res["limits"]["amd.com/gpu"] == 8, (gpu, res)
+        assert "cpu" in res["limits"] and "memory" in res["limits"], (gpu, res)
+
+
+def test_amd_resources_default_to_gpu_only_without_profile_field():
+    res = g.amd_k8s_resources(8, {})
+    assert res == {"requests": {"amd.com/gpu": 8}, "limits": {"amd.com/gpu": 8}}
+
+
 def test_platform_pins_reach_their_own_platform():
     """The release-candidate case: two images that share nothing in their names,
     each reaching only the workloads of its platform."""

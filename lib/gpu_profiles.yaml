@@ -21,6 +21,14 @@ MI300X:
   ecr_pull_through_cache: false
   server_runtime: native
   k8s_plugin: amd
+  # Explicit pod CPU/memory, requests == limits (Guaranteed QoS), sized to ~85%
+  # of node allocatable (191.4 CPU / 2.21 TiB) so the pod effectively has the node to itself.
+  # Unset, the namespace LimitRange defaults apply (12 CPU / 200 GiB), which
+  # throttle a TP8 server into ~2x slower decode. Memory also lets the largest
+  # checkpoint stay in page cache (Kimi-K3 ~1.45 TiB, DeepSeek-V4-Pro ~0.8 TiB).
+  k8s_resources:
+    cpu: 160
+    memory: 1.8Ti
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1
@@ -36,6 +44,14 @@ MI355X:
   ecr_pull_through_cache: false
   server_runtime: native
   k8s_plugin: amd
+  # Explicit pod CPU/memory, requests == limits (Guaranteed QoS), sized to ~85%
+  # of node allocatable (127.4 CPU / 2.95 TiB; 8 CPUs are already held exclusively by other pods) so the pod effectively has the node to itself.
+  # Unset, the namespace LimitRange defaults apply (12 CPU / 200 GiB), which
+  # throttle a TP8 server into ~2x slower decode. Memory also lets the largest
+  # checkpoint stay in page cache (Kimi-K3 ~1.45 TiB, DeepSeek-V4-Pro ~0.8 TiB).
+  k8s_resources:
+    cpu: 112
+    memory: 2.5Ti
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1

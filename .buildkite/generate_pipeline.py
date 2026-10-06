@@ -234,6 +234,23 @@ def hf_cache_volume(gpu, profile):
     return {"name": "hf-cache", **source}
 
 
+def amd_k8s_resources(num_gpus, profile):
+    """Container resources for an AMD pod.
+
+    Without explicit CPU/memory the namespace LimitRange defaults apply (seen on
+    the MI355X queues: a 12-CPU CFS quota on a node exposing 120 CPUs, and a
+    200 GiB memory limit). A TP8 vLLM server keeps ~3 busy-polling threads per
+    worker, so a 12-CPU quota throttles it in nearly every CFS period: decode
+    stalls (~2x conc-1 TPOT) and startup can wedge. Requests equal limits so the
+    pod is Guaranteed QoS (exclusive cores under the static CPU manager), and the
+    CPU limit is always explicit, since an omitted one is filled back in from the
+    LimitRange default.
+    """
+    sizes = {k: str(v) for k, v in (profile.get("k8s_resources") or {}).items()}
+    amounts = {"amd.com/gpu": num_gpus, **sizes}
+    return {"requests": dict(amounts), "limits": dict(amounts)}
+
+
 def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
     profile = profile or {}
     hf_home = profile.get("hf_home") or "/root/.cache/huggingface"
@@ -247,7 +264,7 @@ def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
                     {
                         "name": "container-0",
                         "image": image,
-                        "resources": {"limits": {"amd.com/gpu": num_gpus}},
+                        "resources": amd_k8s_resources(num_gpus, profile),
                         "securityContext": {
                             "seccompProfile": {"type": "Unconfined"},
                             "capabilities": {"add": ["IPC_LOCK", "SYS_PTRACE"]},
