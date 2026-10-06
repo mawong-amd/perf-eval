@@ -19,6 +19,10 @@ source "$DIR/run_vllm_bench.sh"
 source "$DIR/run_aiperf.sh"
 # shellcheck disable=SC1091
 source "$DIR/podstat.sh"
+# DEBUG BRANCH ONLY: always collect pod diagnostics, and never ingest results
+# into the perf dashboard (ingest failures are already non-fatal).
+export PERF_EVAL_PODSTAT=1
+export PERF_INGEST_URL="http://127.0.0.1:9/" INGEST_URL="http://127.0.0.1:9/"
 WORKLOAD_EXPORTS="$(python3 "$DIR/parse_workload.py" "$WORKLOAD")"
 eval "$WORKLOAD_EXPORTS"
 export WORKLOAD_IMAGE WORKLOAD_VLLM_COMMIT WORKLOAD_SERVER_RUNTIME
