@@ -17,6 +17,8 @@ source "$DIR/run_lm_eval.sh"
 source "$DIR/run_vllm_bench.sh"
 # shellcheck disable=SC1091
 source "$DIR/run_aiperf.sh"
+# shellcheck disable=SC1091
+source "$DIR/podstat.sh"
 WORKLOAD_EXPORTS="$(python3 "$DIR/parse_workload.py" "$WORKLOAD")"
 eval "$WORKLOAD_EXPORTS"
 export WORKLOAD_IMAGE WORKLOAD_VLLM_COMMIT WORKLOAD_SERVER_RUNTIME
@@ -33,11 +35,14 @@ if [[ "$WORKLOAD_SERVE_ARGS" =~ (^|[[:space:]])--trust-remote-code([[:space:]]|$
 fi
 mkdir -p "$RESULTS_DIR"
 
-trap 'stop_server "$CONTAINER"' EXIT
+trap 'podstat_stop; podstat_snapshot exit; stop_server "$CONTAINER"' EXIT
+podstat_snapshot pre-server
+podstat_start
 
 start_server "$CONTAINER" "$PORT" "$WORKLOAD_IMAGE" "$WORKLOAD_MODEL" \
              "$WORKLOAD_SERVE_ARGS" "$WORKLOAD_ENV" "$WORKLOAD_SERVER_RUNTIME"
 wait_healthy "$PORT" "$WORKLOAD_SERVER_STARTUP_TIMEOUT" "$WORKLOAD_MODEL"
+podstat_snapshot server-healthy
 
 # vllm bench serve runs first so we can validate perf flow without waiting
 # on a full lm_eval pass. Each config's raw json lands in
