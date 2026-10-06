@@ -251,7 +251,7 @@ def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
                         # (12 CPU / 200 GiB) are not applied. A CPU limit must be
                         # set explicitly, or the default limit is filled in.
                         "resources": {
-                            "requests": {"amd.com/gpu": num_gpus, "cpu": "64", "memory": "256Gi"},
+                            "requests": {"amd.com/gpu": num_gpus, "cpu": "8", "memory": "64Gi"},
                             "limits": {"amd.com/gpu": num_gpus, "cpu": "112", "memory": "1Ti"},
                         },
                         "securityContext": {

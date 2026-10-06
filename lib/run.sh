@@ -41,6 +41,11 @@ mkdir -p "$RESULTS_DIR"
 
 trap 'podstat_stop; podstat_snapshot exit; stop_server "$CONTAINER"' EXIT
 podstat_snapshot pre-server
+podstat_node_probe
+if [[ "${PERF_EVAL_PROBE_ONLY:-}" == 1 ]]; then
+  echo "PERF_EVAL_PROBE_ONLY=1: node probe only, not starting a server"
+  exit 0
+fi
 podstat_install_pyspy
 podstat_start
 

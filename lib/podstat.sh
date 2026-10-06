@@ -166,3 +166,33 @@ podstat_hangwatch() {
   ) &
   PODSTAT_HANG_PID=$!
 }
+
+# Node facts for sizing pod requests: host memory, CPUs, and (if the service
+# account may read it) the node's allocatable capacity from the k8s API.
+podstat_node_probe() {
+  [[ "${PERF_EVAL_PODSTAT:-}" == 1 ]] || return 0
+  echo "--- :mag: podstat node probe"
+  {
+    grep -E "^(MemTotal|MemAvailable|HugePages_Total|Hugepagesize):" /proc/meminfo | sed 's/^/[podstat] meminfo: /'
+    echo "[podstat] cpus: online=$(cat /sys/devices/system/cpu/online) nproc=$(nproc) cpuset=$(cat /sys/fs/cgroup/cpuset/cpuset.cpus 2>/dev/null || cat /sys/fs/cgroup/cpuset.cpus.effective 2>/dev/null)"
+    echo "[podstat] k8s node: ${BUILDKITE_AGENT_META_DATA_K8S_NODE:-unknown}"
+    local sa=/var/run/secrets/kubernetes.io/serviceaccount node=${BUILDKITE_AGENT_META_DATA_K8S_NODE:-}
+    if [[ -r $sa/token && -n "$node" ]]; then
+      curl -s -m 20 --cacert $sa/ca.crt -H "Authorization: Bearer $(cat $sa/token)" \
+        "https://kubernetes.default.svc/api/v1/nodes/$node" \
+        | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+if d.get("kind")!="Node": print("[podstat] k8s api:", d.get("reason"), d.get("message","")[:160]); raise SystemExit
+st=d["status"]
+for k in ("capacity","allocatable"): print("[podstat] k8s", k, {r: st[k].get(r) for r in ("cpu","memory","amd.com/gpu","ephemeral-storage","hugepages-2Mi","hugepages-1Gi","pods")})
+print("[podstat] k8s taints:", d["spec"].get("taints")); print("[podstat] k8s labels:", {k:v for k,v in d["metadata"].get("labels",{}).items() if "node" in k or "pool" in k or "gpu" in k or "instance" in k})' 2>&1
+      curl -s -m 20 --cacert $sa/ca.crt -H "Authorization: Bearer $(cat $sa/token)" \
+        "https://kubernetes.default.svc/api/v1/namespaces/$(cat $sa/namespace)/limitranges" \
+        | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print("[podstat] limitranges:", json.dumps([i.get("spec") for i in d.get("items",[])]) if "items" in d else (d.get("reason"), d.get("message","")[:160]))' 2>&1
+    else
+      echo "[podstat] k8s api: no service-account token mounted"
+    fi
+  } || true
+}
