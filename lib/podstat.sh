@@ -11,7 +11,7 @@
 PODSTAT_INTERVAL="${PERF_EVAL_PODSTAT_INTERVAL:-5}"
 _podstat_cg=/sys/fs/cgroup
 # cgroup v1 (or hybrid) hosts expose one directory per controller instead.
-_podstat_v1cpu=$(ls -d /sys/fs/cgroup/cpu,cpuacct /sys/fs/cgroup/cpu 2>/dev/null | head -1)
+_podstat_v1cpu=$(ls -d /sys/fs/cgroup/cpu,cpuacct /sys/fs/cgroup/cpu 2>/dev/null | head -1 || true)
 _podstat_v1mem=/sys/fs/cgroup/memory
 _podstat_v1set=/sys/fs/cgroup/cpuset
 
