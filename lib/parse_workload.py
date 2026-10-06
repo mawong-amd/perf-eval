@@ -182,6 +182,23 @@ def resolve_image(vllm: dict, profile: dict) -> tuple[str, str]:
     return image, commit_from_image(str(image))
 
 
+def apply_default_serve_args(serve_args: str, defaults: dict | None) -> str:
+    """Append a profile's default serve args the workload does not already set.
+
+    ``defaults`` maps an option to its value (``True``/``None`` for a bare flag),
+    e.g. ``{"--load-format": "fastsafetensors"}``. A workload overrides a default
+    simply by passing the option itself (``--load-format auto``), so one model
+    that cannot use a default opts out without touching the profile.
+    """
+    toks = serve_args.split()
+    extra = []
+    for opt, val in (defaults or {}).items():
+        if any(t == opt or t.startswith(opt + "=") for t in toks):
+            continue
+        extra.append(opt if val is True or val is None else f"{opt} {val}")
+    return " ".join([serve_args.strip(), *extra]).strip()
+
+
 def parse_tp(serve_args: str) -> int:
     """Effective parallel degree (TP * DP) from serve_args; defaults to 1.
 
@@ -536,6 +553,7 @@ def main(path: str) -> None:
     if bfcl:
         validate_bfcl(bfcl, serve_args, path)
 
+    serve_args = apply_default_serve_args(serve_args, profile.get("default_serve_args"))
     image, vllm_commit = resolve_image(vllm, profile)
     env = {**(profile.get("env") or {}), **(vllm.get("env") or {})}
     if "HF_HOME" not in env and profile.get("hf_home"):

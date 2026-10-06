@@ -79,3 +79,28 @@ def test_cuda_release_image_does_not_select_rocm_commit(monkeypatch):
 
     assert image == "vllm/vllm-openai-rocm:nightly"
     assert commit == ""
+
+
+def test_default_serve_args_appended_when_absent():
+    out = parse_workload.apply_default_serve_args(
+        "--tensor-parallel-size 8", {"--load-format": "fastsafetensors"}
+    )
+    assert out == "--tensor-parallel-size 8 --load-format fastsafetensors"
+
+
+@pytest.mark.parametrize(
+    "serve_args", ["--load-format auto", "--tensor-parallel-size 8 --load-format=dummy"]
+)
+def test_workload_option_overrides_default(serve_args):
+    out = parse_workload.apply_default_serve_args(
+        serve_args, {"--load-format": "fastsafetensors"}
+    )
+    assert out == serve_args
+    assert "fastsafetensors" not in out
+
+
+def test_bare_flag_default_and_no_defaults():
+    assert parse_workload.apply_default_serve_args("", {"--enforce-eager": True}) == (
+        "--enforce-eager"
+    )
+    assert parse_workload.apply_default_serve_args("--x 1", None) == "--x 1"

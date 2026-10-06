@@ -29,6 +29,12 @@ MI300X:
   k8s_resources:
     cpu: 160
     memory: 1.8Ti
+  # Serve args added to every workload on this GPU unless the workload already
+  # sets the option (a workload opts out by passing it, e.g. --load-format auto).
+  # fastsafetensors loads with large parallel reads instead of page-faulting the
+  # checkpoint in, which matters on network storage.
+  default_serve_args:
+    --load-format: fastsafetensors
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1
@@ -52,6 +58,12 @@ MI355X:
   k8s_resources:
     cpu: 112
     memory: 2.5Ti
+  # Serve args added to every workload on this GPU unless the workload already
+  # sets the option (a workload opts out by passing it, e.g. --load-format auto).
+  # fastsafetensors loads with large parallel reads instead of page-faulting the
+  # checkpoint in, which matters on network storage.
+  default_serve_args:
+    --load-format: fastsafetensors
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1
