@@ -139,7 +139,10 @@ podstat_hang_capture() {
       echo "[podstat]   wchan: $(cat /proc/$p/wchan 2>/dev/null)"
       sed 's/^/[podstat]   kstack: /' /proc/$p/stack 2>/dev/null | head -12
       if command -v py-spy >/dev/null; then
-        timeout 60 py-spy dump --pid "$p" 2>&1 | head -80 | sed 's/^/[podstat]   py: /'
+        # Native frames name the HIP/HSA call a rank is stuck in; fall back to
+        # Python-only frames if native unwinding is unavailable.
+        { timeout 90 py-spy dump --native --pid "$p" 2>&1 || timeout 60 py-spy dump --pid "$p" 2>&1; } \
+          | head -140 | sed 's/^/[podstat]   py: /'
       fi
     done
     local smi; smi=$(command -v rocm-smi || ls /opt/rocm/bin/rocm-smi 2>/dev/null)
