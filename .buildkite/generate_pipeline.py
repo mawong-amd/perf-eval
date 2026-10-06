@@ -247,7 +247,13 @@ def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
                     {
                         "name": "container-0",
                         "image": image,
-                        "resources": {"limits": {"amd.com/gpu": num_gpus}},
+                        # Explicit CPU/memory so the namespace LimitRange defaults
+                        # (12 CPU / 200 GiB) are not applied. A CPU limit must be
+                        # set explicitly, or the default limit is filled in.
+                        "resources": {
+                            "requests": {"amd.com/gpu": num_gpus, "cpu": "64", "memory": "256Gi"},
+                            "limits": {"amd.com/gpu": num_gpus, "cpu": "112", "memory": "1Ti"},
+                        },
                         "securityContext": {
                             "seccompProfile": {"type": "Unconfined"},
                             "capabilities": {"add": ["IPC_LOCK", "SYS_PTRACE"]},
