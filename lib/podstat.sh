@@ -10,6 +10,10 @@
 
 PODSTAT_INTERVAL="${PERF_EVAL_PODSTAT_INTERVAL:-5}"
 _podstat_cg=/sys/fs/cgroup
+# cgroup v1 (or hybrid) hosts expose one directory per controller instead.
+_podstat_v1cpu=$(ls -d /sys/fs/cgroup/cpu,cpuacct /sys/fs/cgroup/cpu 2>/dev/null | head -1)
+_podstat_v1mem=/sys/fs/cgroup/memory
+_podstat_v1set=/sys/fs/cgroup/cpuset
 
 _podstat_cat() {
   local f
@@ -34,6 +38,19 @@ podstat_snapshot() {
                  "$_podstat_cg"/memory.events "$_podstat_cg"/memory.pressure "$_podstat_cg"/cpu.pressure
     grep -E "^(anon|file|shmem|file_dirty|file_writeback|pgmajfault|workingset_refault_file) " \
       "$_podstat_cg"/memory.stat 2>/dev/null | sed 's/^/[podstat] memory.stat: /'
+    # cgroup v1
+    _podstat_cat "$_podstat_v1cpu"/cpu.cfs_quota_us "$_podstat_v1cpu"/cpu.cfs_period_us \
+                 "$_podstat_v1cpu"/cpu.shares "$_podstat_v1cpu"/cpu.stat \
+                 "$_podstat_v1set"/cpuset.cpus "$_podstat_v1set"/cpuset.mems \
+                 "$_podstat_v1mem"/memory.limit_in_bytes "$_podstat_v1mem"/memory.soft_limit_in_bytes \
+                 "$_podstat_v1mem"/memory.usage_in_bytes "$_podstat_v1mem"/memory.max_usage_in_bytes \
+                 "$_podstat_v1mem"/memory.failcnt "$_podstat_v1mem"/memory.oom_control
+    grep -E "^(total_)?(cache|rss|shmem|mapped_file|dirty|writeback|pgmajfault|inactive_file|active_file) " \
+      "$_podstat_v1mem"/memory.stat 2>/dev/null | sed 's/^/[podstat] v1 memory.stat: /'
+    # Node-wide pressure (cgroup v1 has no per-cgroup PSI).
+    for _p in cpu memory io; do
+      [[ -r /proc/pressure/$_p ]] && sed "s|^|[podstat] node pressure $_p: |" /proc/pressure/$_p
+    done
     df -h /dev/shm /tmp /workspace "${HF_HOME:-/nonexistent}" 2>/dev/null | sed 's/^/[podstat] df: /'
     command -v numactl >/dev/null && numactl -H 2>/dev/null | head -4 | sed 's/^/[podstat] numa: /'
     lscpu 2>/dev/null | grep -E "^(Model name|Socket|NUMA node\(s\)|CPU max MHz|CPU min MHz)" | sed 's/^/[podstat] lscpu: /'
@@ -53,12 +70,19 @@ podstat_start() {
   [[ "${PERF_EVAL_PODSTAT:-}" == 1 ]] || return 0
   (
     while :; do
-      printf '[podstat] sample %s cpu.stat{%s} mem.current=%s mem.events{%s} cpu.pressure{%s}\n' \
+      printf '[podstat] sample %s cpu.stat{%s} mem.current=%s mem.events{%s} cpu.pressure{%s} v1cpu{%s} v1mem{usage=%s max=%s failcnt=%s %s} node.psi{cpu:%s mem:%s}\n' \
         "$(date +%T)" \
         "$( { tr '\n' ' ' < "$_podstat_cg"/cpu.stat; } 2>/dev/null)" \
         "$(cat "$_podstat_cg"/memory.current 2>/dev/null)" \
         "$( { tr '\n' ' ' < "$_podstat_cg"/memory.events; } 2>/dev/null)" \
-        "$(head -1 "$_podstat_cg"/cpu.pressure 2>/dev/null)"
+        "$(head -1 "$_podstat_cg"/cpu.pressure 2>/dev/null)" \
+        "$( { tr '\n' ' ' < "$_podstat_v1cpu"/cpu.stat; } 2>/dev/null)" \
+        "$(cat "$_podstat_v1mem"/memory.usage_in_bytes 2>/dev/null)" \
+        "$(cat "$_podstat_v1mem"/memory.max_usage_in_bytes 2>/dev/null)" \
+        "$(cat "$_podstat_v1mem"/memory.failcnt 2>/dev/null)" \
+        "$(grep -E '^(total_)?(cache|rss|shmem|pgmajfault) ' "$_podstat_v1mem"/memory.stat 2>/dev/null | tr '\n' ' ')" \
+        "$(head -1 /proc/pressure/cpu 2>/dev/null)" \
+        "$(head -1 /proc/pressure/memory 2>/dev/null)"
       sleep "$PODSTAT_INTERVAL"
     done
   ) &
