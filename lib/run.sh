@@ -41,10 +41,12 @@ mkdir -p "$RESULTS_DIR"
 
 trap 'podstat_stop; podstat_snapshot exit; stop_server "$CONTAINER"' EXIT
 podstat_snapshot pre-server
+podstat_install_pyspy
 podstat_start
 
 start_server "$CONTAINER" "$PORT" "$WORKLOAD_IMAGE" "$WORKLOAD_MODEL" \
              "$WORKLOAD_SERVE_ARGS" "$WORKLOAD_ENV" "$WORKLOAD_SERVER_RUNTIME"
+podstat_hangwatch "$PORT"
 wait_healthy "$PORT" "$WORKLOAD_SERVER_STARTUP_TIMEOUT" "$WORKLOAD_MODEL"
 podstat_snapshot server-healthy
 

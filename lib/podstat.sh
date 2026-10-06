@@ -91,4 +91,78 @@ podstat_start() {
 
 podstat_stop() {
   [[ -n "${PODSTAT_PID:-}" ]] && kill "$PODSTAT_PID" 2>/dev/null || true
+  [[ -n "${PODSTAT_HANG_PID:-}" ]] && kill "$PODSTAT_HANG_PID" 2>/dev/null || true
+}
+
+# Hang capture: if the server is not healthy PERF_EVAL_PODSTAT_HANG_AFTER seconds
+# after start, dump lock holders, Python stacks, process tree and GPU state, twice.
+PODSTAT_HANG_AFTER="${PERF_EVAL_PODSTAT_HANG_AFTER:-1800}"
+
+podstat_install_pyspy() {
+  [[ "${PERF_EVAL_PODSTAT:-}" == 1 ]] || return 0
+  command -v py-spy >/dev/null && return 0
+  ( python3 -m pip install --quiet py-spy >/dev/null 2>&1 \
+      || python3 -m pip install --user --quiet py-spy >/dev/null 2>&1 ) || true
+  echo "[podstat] py-spy: $(command -v py-spy || echo unavailable)"
+}
+
+_podstat_lock_report() {
+  # AITER's FileBaton is an O_CREAT|O_EXCL file whose contents are "<pid>\n<host>\n";
+  # waiters poll for it to disappear and only break it if the holder is dead.
+  local f pid host age
+  ls -la --time-style=+%T /tmp/aiter_configs 2>/dev/null | sed 's/^/[podstat] aiter_configs: /'
+  for f in /tmp/aiter_configs/*.lock /root/.aiter/build/*/lock; do
+    [[ -e "$f" ]] || continue
+    pid=$(sed -n 1p "$f" 2>/dev/null); host=$(sed -n 2p "$f" 2>/dev/null)
+    age=$(( $(date +%s) - $(stat -c %Y "$f" 2>/dev/null || date +%s) ))
+    echo "[podstat] lock $f holder_pid=${pid:-<empty>} host=${host:-?} age=${age}s alive=$([[ -n "$pid" && -d /proc/$pid ]] && echo yes || echo no)"
+    if [[ -n "$pid" && -r /proc/$pid/status ]]; then
+      echo "[podstat]   holder: $(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null | cut -c1-120) | $(grep -E '^State' /proc/$pid/status | tr -s '\t ' ' ') | wchan=$(cat /proc/$pid/wchan 2>/dev/null)"
+    fi
+  done
+}
+
+podstat_hang_capture() {
+  local tag=$1 p
+  echo "--- :rotating_light: podstat hang capture ${tag}"
+  {
+    echo "[podstat] hang ${tag} at $(date -Is)"
+    _podstat_lock_report
+    echo "[podstat] process tree:"
+    ps -eo pid,ppid,stat,pcpu,rss,etimes,wchan:32,args --forest 2>/dev/null | cut -c1-260 | sed 's/^/[podstat] ps: /'
+    echo "[podstat] threads not sleeping (R/D):"
+    ps -eLo pid,tid,stat,pcpu,wchan:32,comm 2>/dev/null | awk 'NR==1 || $3 ~ /^[RD]/' | sed 's/^/[podstat] thr: /'
+    for p in $(pgrep -f -- 'vllm|VLLM|python' 2>/dev/null); do
+      [[ -r /proc/$p/status ]] || continue
+      echo "[podstat] === pid $p $(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null | cut -c1-160)"
+      grep -E '^(State|Threads|VmRSS)' /proc/$p/status 2>/dev/null | sed 's/^/[podstat]   /'
+      echo "[podstat]   wchan: $(cat /proc/$p/wchan 2>/dev/null)"
+      sed 's/^/[podstat]   kstack: /' /proc/$p/stack 2>/dev/null | head -12
+      if command -v py-spy >/dev/null; then
+        timeout 60 py-spy dump --pid "$p" 2>&1 | head -80 | sed 's/^/[podstat]   py: /'
+      fi
+    done
+    local smi; smi=$(command -v rocm-smi || ls /opt/rocm/bin/rocm-smi 2>/dev/null)
+    [[ -n "$smi" ]] && "$smi" --showuse --showpower --showmemuse 2>/dev/null | grep -E "GPU use|Power \(|VRAM%" | sed 's/^/[podstat] rocm-smi: /'
+  } || true
+}
+
+podstat_hangwatch() {
+  [[ "${PERF_EVAL_PODSTAT:-}" == 1 ]] || return 0
+  local port=$1
+  (
+    local start=$SECONDS
+    while :; do
+      sleep 60
+      curl -sf -m 5 "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && exit 0
+      if (( SECONDS - start >= PODSTAT_HANG_AFTER )); then
+        podstat_hang_capture first
+        sleep 120
+        curl -sf -m 5 "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && exit 0
+        podstat_hang_capture second
+        exit 0
+      fi
+    done
+  ) &
+  PODSTAT_HANG_PID=$!
 }
