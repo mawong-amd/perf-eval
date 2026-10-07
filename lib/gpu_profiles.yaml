@@ -31,6 +31,9 @@ MI300X:
   k8s_resources:
     cpu: 160
     memory: 1.8Ti
+  # Added to each workload's serve args unless the workload sets the option.
+  default_serve_args:
+    --load-format: fastsafetensors
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1
@@ -51,6 +54,9 @@ MI355X:
   k8s_resources:
     cpu: 112
     memory: 2.5Ti
+  # Added to each workload's serve args unless the workload sets the option.
+  default_serve_args:
+    --load-format: fastsafetensors
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1
