@@ -122,6 +122,17 @@ def test_shipped_amd_profiles_have_no_rootdisk_hostpath():
         )
 
 
+def test_amd_resources_come_from_the_profile():
+    """CPU and memory come from the profile's k8s_resources, with requests equal
+    to limits; without that field the pod asks only for its GPUs."""
+    res = g.amd_k8s_resources(8, {"k8s_resources": {"cpu": 112, "memory": "2.5Ti"}})
+    want = {"amd.com/gpu": 8, "cpu": "112", "memory": "2.5Ti"}
+    assert res == {"requests": want, "limits": want}
+
+    gpu_only = {"amd.com/gpu": 8}
+    assert g.amd_k8s_resources(8, {}) == {"requests": gpu_only, "limits": gpu_only}
+
+
 def test_platform_pins_reach_their_own_platform():
     """The release-candidate case: two images that share nothing in their names,
     each reaching only the workloads of its platform."""

@@ -26,6 +26,11 @@ MI300X:
   ecr_pull_through_cache: false
   server_runtime: native
   k8s_plugin: amd
+  # Pod CPU/memory (requests == limits), ~85% of node allocatable. Unset, the
+  # namespace LimitRange defaults apply and throttle the server.
+  k8s_resources:
+    cpu: 160
+    memory: 1.8Ti
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1
@@ -41,6 +46,11 @@ MI355X:
   ecr_pull_through_cache: false
   server_runtime: native
   k8s_plugin: amd
+  # Pod CPU/memory (requests == limits), ~85% of node allocatable. Unset, the
+  # namespace LimitRange defaults apply and throttle the server.
+  k8s_resources:
+    cpu: 112
+    memory: 2.5Ti
   env:
     # OMP_NUM_THREADS=1 workaround after weight loading regression from https://github.com/vllm-project/vllm/pull/49919
     OMP_NUM_THREADS: 1

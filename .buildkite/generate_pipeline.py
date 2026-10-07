@@ -237,6 +237,19 @@ def hf_cache_volume(gpu, profile):
     return {"name": "hf-cache", **source}
 
 
+def amd_k8s_resources(num_gpus, profile):
+    """Container resources for an AMD pod: its GPUs plus the profile's
+    ``k8s_resources``, with requests equal to limits.
+
+    The CPU limit must be explicit; an omitted one is filled in from the
+    namespace LimitRange default, a CFS quota small enough to throttle a TP8
+    server.
+    """
+    sizes = {k: str(v) for k, v in (profile.get("k8s_resources") or {}).items()}
+    amounts = {"amd.com/gpu": num_gpus, **sizes}
+    return {"requests": dict(amounts), "limits": dict(amounts)}
+
+
 def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
     profile = profile or {}
     hf_home = profile.get("hf_home") or "/root/.cache/huggingface"
@@ -250,7 +263,7 @@ def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
                     {
                         "name": "container-0",
                         "image": image,
-                        "resources": {"limits": {"amd.com/gpu": num_gpus}},
+                        "resources": amd_k8s_resources(num_gpus, profile),
                         "securityContext": {
                             "seccompProfile": {"type": "Unconfined"},
                             "capabilities": {"add": ["IPC_LOCK", "SYS_PTRACE"]},
