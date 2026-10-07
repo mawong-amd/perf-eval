@@ -228,13 +228,18 @@ def hf_cache_volume(gpu, profile):
     want a warm, cross-run cache point this at their own PVC (or a real hostPath
     mount) via the override — the pod's ``HF_HOME`` mount path is unchanged either
     way, so only cross-run persistence differs.
+
+    The name is not ``hf-cache`` on purpose: the agent-stack-k8s controller
+    merges its own ``pod-spec-patch`` with this one by volume name, and a
+    controller-provided ``hf-cache`` with a different source type makes the
+    merged volume invalid.
     """
     override = (os.environ.get(f"{gpu.upper()}_HF_CACHE_VOLUME") or "").strip()
     if override:
         source = yaml.safe_load(override)
     else:
         source = profile.get("hf_cache_volume") or {"emptyDir": {}}
-    return {"name": "hf-cache", **source}
+    return {"name": "hf-cache-local", **source}
 
 
 def amd_k8s_resources(num_gpus, profile):
@@ -270,7 +275,7 @@ def amd_k8s_plugin(image, num_gpus, profile=None, gpu=None):
                         },
                         "volumeMounts": [
                             {"name": "devshm", "mountPath": "/dev/shm"},
-                            {"name": "hf-cache", "mountPath": hf_home},
+                            {"name": "hf-cache-local", "mountPath": hf_home},
                         ],
                         "env": [
                             {"name": "VLLM_USAGE_SOURCE", "value": "ci-test"},
