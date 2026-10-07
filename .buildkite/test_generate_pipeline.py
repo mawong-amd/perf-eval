@@ -54,7 +54,7 @@ def test_default_hf_cache_is_emptydir_not_hostpath():
     """Default (no override, no profile field) must be an emptyDir, never a
     hostPath — a hostPath on an unmounted node path is what filled root disks."""
     _, vols = _amd_volumes({})
-    hf = vols["hf-cache"]
+    hf = vols["hf-cache-local"]
     assert "emptyDir" in hf, f"expected emptyDir default, got {hf}"
     assert "hostPath" not in hf, f"default must not be a hostPath: {hf}"
 
@@ -64,16 +64,16 @@ def test_hf_home_mount_matches_env():
     finds its cache at the advertised location."""
     patch, vols = _amd_volumes({"hf_home": "/root/.cache/huggingface"})
     c = patch["containers"][0]
-    mount = next(m for m in c["volumeMounts"] if m["name"] == "hf-cache")
+    mount = next(m for m in c["volumeMounts"] if m["name"] == "hf-cache-local")
     hf_home = next(e for e in c["env"] if e["name"] == "HF_HOME")
     assert mount["mountPath"] == hf_home["value"] == "/root/.cache/huggingface"
 
 
 def test_profile_field_overrides_source():
-    """A profile-level hf_cache_volume sets the source but keeps the volume name."""
+    """A profile-level hf_cache_volume sets the source; the volume name stays fixed."""
     pvc = {"persistentVolumeClaim": {"claimName": "hf-cache-pvc"}}
     _, vols = _amd_volumes({"hf_cache_volume": pvc})
-    assert vols["hf-cache"] == {"name": "hf-cache", **pvc}
+    assert vols["hf-cache-local"] == {"name": "hf-cache-local", **pvc}
 
 
 def test_env_override_wins_over_profile_and_default():
@@ -90,8 +90,8 @@ def test_env_override_wins_over_profile_and_default():
             os.environ.pop(key, None)
         else:
             os.environ[key] = prev
-    assert vols["hf-cache"] == {
-        "name": "hf-cache",
+    assert vols["hf-cache-local"] == {
+        "name": "hf-cache-local",
         "persistentVolumeClaim": {"claimName": "buildkite-hf-cache"},
     }
 
@@ -108,7 +108,7 @@ def test_env_override_is_scoped_per_gpu():
             os.environ.pop(key, None)
         else:
             os.environ[key] = prev
-    assert "emptyDir" in vols["hf-cache"], vols["hf-cache"]
+    assert "emptyDir" in vols["hf-cache-local"], vols["hf-cache-local"]
 
 
 def test_shipped_amd_profiles_have_no_rootdisk_hostpath():
